@@ -27,9 +27,17 @@ exports.signup = async (req, res) => {
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        // console.log(`Login attempt for email: ${email}`);
+
         const user = await User.findOne({ email });
 
-        if (user && user.password === password) { // Simple password check for now
+        if (!user) {
+            // console.log(`Login failed: User not found for email: ${email}`);
+            return res.status(401).json({ message: "Invalid email or password" });
+        }
+
+        if (user.password === password) { // Simple password check for now
+            // console.log(`Login successful for email: ${email}`);
             res.json({
                 _id: user.id,
                 username: user.username,
@@ -37,9 +45,11 @@ exports.login = async (req, res) => {
                 message: "response correct"
             });
         } else {
+            // console.log(`Login failed: Incorrect password for email: ${email}`);
             res.status(401).json({ message: "Invalid email or password" });
         }
     } catch (error) {
+        // console.error(`Login error: ${error.message}`);
         res.status(500).json({ message: error.message });
     }
 };
