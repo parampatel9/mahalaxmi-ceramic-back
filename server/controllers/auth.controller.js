@@ -1,4 +1,5 @@
 const User = require("../models/admin");
+const jwt = require("jsonwebtoken");
 
 // @desc Register a new user
 // @route POST /api/auth/signup
@@ -22,6 +23,16 @@ exports.signup = async (req, res) => {
     }
 };
 
+// @desc Logout user
+// @route POST /api/auth/logout
+exports.logout = async (req, res) => {
+    try {
+        res.status(200).json({ message: "Logged out successfully" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc Login user
 // @route POST /api/auth/login
 exports.login = async (req, res) => {
@@ -37,15 +48,17 @@ exports.login = async (req, res) => {
         }
 
         if (user.password === password) { // Simple password check for now
-            // console.log(`Login successful for email: ${email}`);
+            const token = jwt.sign(
+                { id: user.id, email: user.email, username: user.username },
+                process.env.JWT_SECRET,
+                { expiresIn: process.env.JWT_EXPIRY || "24h" }
+            );
+
             res.json({
-                _id: user.id,
-                username: user.username,
-                email: user.email,
-                message: "response correct"
+                token,
+                message: "Login successful"
             });
         } else {
-            // console.log(`Login failed: Incorrect password for email: ${email}`);
             res.status(401).json({ message: "Invalid email or password" });
         }
     } catch (error) {
