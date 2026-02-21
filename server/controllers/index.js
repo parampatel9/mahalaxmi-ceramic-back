@@ -1,4 +1,4 @@
-const Item = require("../models/Item");
+const Item = require("../models/admin");
 
 // @desc Get all items
 // @route GET /api/items

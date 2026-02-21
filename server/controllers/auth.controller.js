@@ -1,4 +1,4 @@
-const User = require("../models/User");
+const User = require("../models/admin");
 
 // @desc Register a new user
 // @route POST /api/auth/signup
@@ -33,7 +33,8 @@ exports.login = async (req, res) => {
             res.json({
                 _id: user.id,
                 username: user.username,
-                email: user.email
+                email: user.email,
+                message: "response correct"
             });
         } else {
             res.status(401).json({ message: "Invalid email or password" });
