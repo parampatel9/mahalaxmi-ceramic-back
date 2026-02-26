@@ -9,7 +9,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ✅ CORS FIX
-app.use(cors());
+app.use(cors({
+  origin: "https://mahalaxmi-ceramic.onrender.com" || "*",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Timezone"]
+}));
 
 app.options("*", cors());
 
