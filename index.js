@@ -9,12 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ✅ CORS FIX
-app.use(cors({
-  origin: "http://localhost:3039",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Timezone"]
-}));
+app.use(cors());
 
 app.options("*", cors());
 
