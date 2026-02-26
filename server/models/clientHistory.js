@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const clientHistorySchema = new mongoose.Schema(
   {
+    clientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Client",
+      required: true,
+    },
     billNumber: {
       type: Number,
       required: true,
@@ -31,6 +36,7 @@ const clientHistorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+clientHistorySchema.index({ clientId: 1 });
 clientHistorySchema.index({ billNumber: 1 });
 clientHistorySchema.index({ itemNumber: 1 });
 

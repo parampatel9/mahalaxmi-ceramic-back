@@ -13,8 +13,14 @@ function buildListQuery(req, options = {}) {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
   const skip = (page - 1) * limit;
 
-  // Search: single `search` param, matched against searchFields (case-insensitive)
-  const search = (req.query.search || "").trim();
+  // Search: support `search` and legacy `searchFields` as the search text.
+  const rawSearch =
+    typeof req.query.search === "string"
+      ? req.query.search
+      : typeof req.query.searchFields === "string"
+      ? req.query.searchFields
+      : "";
+  const search = rawSearch.trim();
   if (search && searchFields.length) {
     query.$or = searchFields.map((field) => ({
       [field]: new RegExp(search, "i"),
