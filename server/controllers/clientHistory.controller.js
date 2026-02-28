@@ -58,6 +58,102 @@ exports.list = async (req, res) => {
   }
 };
 
+exports.dayWiseSummary = async (req, res) => {
+  try {
+    const { id: clientId } = req.params;
+    if (!clientId) {
+      return res.status(400).json({ message: "clientId is required" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(clientId)) {
+      return res.status(400).json({ message: "Invalid client ID" });
+    }
+
+    const client = await Client.findById(clientId).lean();
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    const clientObjectId = new mongoose.Types.ObjectId(clientId);
+
+    const rows = await ClientHistory.aggregate([
+      { $match: { clientId: clientObjectId } },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+            day: { $dayOfMonth: "$createdAt" },
+          },
+          totalAmount: { $sum: "$totalPrice" },
+          billNumbers: { $addToSet: "$billNumber" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: {
+            $dateFromParts: {
+              year: "$_id.year",
+              month: "$_id.month",
+              day: "$_id.day",
+            },
+          },
+          totalAmount: 1,
+          billCount: { $size: "$billNumbers" },
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
+    res.json({ client: { _id: client._id, clientName: client.clientName }, data: rows });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.monthWiseSummary = async (req, res) => {
+  try {
+    const { id: clientId } = req.params;
+    if (!clientId) {
+      return res.status(400).json({ message: "clientId is required" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(clientId)) {
+      return res.status(400).json({ message: "Invalid client ID" });
+    }
+
+    const client = await Client.findById(clientId).lean();
+    if (!client) return res.status(404).json({ message: "Client not found" });
+
+    const clientObjectId = new mongoose.Types.ObjectId(clientId);
+
+    const rows = await ClientHistory.aggregate([
+      { $match: { clientId: clientObjectId } },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+          },
+          totalAmount: { $sum: "$totalPrice" },
+          days: { $addToSet: { $dayOfMonth: "$createdAt" } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          year: "$_id.year",
+          month: "$_id.month",
+          totalAmount: 1,
+          dayCount: { $size: "$days" },
+        },
+      },
+      { $sort: { year: 1, month: 1 } },
+    ]);
+
+    res.json({ client: { _id: client._id, clientName: client.clientName }, data: rows });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getOne = async (req, res) => {
   try {
     const doc = await ClientHistory.findById(req.params.id).lean();
