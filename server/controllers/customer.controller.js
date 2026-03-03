@@ -13,6 +13,22 @@ class ValidationError extends Error {
   }
 }
 
+function normalizeCustomerFields(payload) {
+  const customerName = String(payload.customerName || "").trim();
+  const address = String(payload.address || "").trim();
+  const mobileNumber = String(payload.mobileNumber || "").trim();
+
+  if (!customerName) throw new ValidationError("customerName is required");
+  if (!address) throw new ValidationError("address is required");
+  if (!mobileNumber) throw new ValidationError("mobileNumber is required");
+  if (payload.date == null || payload.date === "") throw new ValidationError("date is required");
+
+  const date = new Date(payload.date);
+  if (Number.isNaN(date.getTime())) throw new ValidationError("date must be a valid date");
+
+  return { customerName, address, mobileNumber, date };
+}
+
 function normalizeItems(payload) {
   if (Array.isArray(payload.items)) return payload.items;
 
@@ -127,11 +143,18 @@ exports.getNextBillNumber = async (req, res) => {
  */
 exports.create = async (req, res) => {
   try {
-    const { customerName, billNumber } = req.body;
-    if (!customerName || !String(customerName).trim())
-      return res.status(400).json({ message: "customerName is required" });
-    if (billNumber == null || billNumber === "")
-      return res.status(400).json({ message: "billNumber is required" });
+    let customerFields;
+    try {
+      customerFields = normalizeCustomerFields(req.body);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(error.status).json({ message: error.message });
+      }
+      throw error;
+    }
+
+    const { billNumber } = req.body;
+    if (billNumber == null || billNumber === "") return res.status(400).json({ message: "billNumber is required" });
 
     const billNum = Number(billNumber);
     if (Number.isNaN(billNum) || billNum < 0)
@@ -167,7 +190,7 @@ exports.create = async (req, res) => {
     const grandTotal = sanitizedItems.reduce((sum, item) => sum + item.total, 0);
 
     const customer = await Customer.create({
-      customerName: String(customerName).trim(),
+      ...customerFields,
       billNumber: billNum,
       items: sanitizedItems,
       grandTotal,
@@ -199,6 +222,21 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const payload = { ...req.body };
+    let customerFields;
+    try {
+      customerFields = normalizeCustomerFields(payload);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return res.status(error.status).json({ message: error.message });
+      }
+      throw error;
+    }
+
+    payload.customerName = customerFields.customerName;
+    payload.address = customerFields.address;
+    payload.mobileNumber = customerFields.mobileNumber;
+    payload.date = customerFields.date;
+
     if (payload.billNumber != null && payload.billNumber !== "") {
       const billNum = Number(payload.billNumber);
       if (Number.isNaN(billNum) || billNum < 0)
@@ -215,7 +253,9 @@ exports.update = async (req, res) => {
       }
 
     payload.billNumber = billNum;
-  }
+    } else {
+      return res.status(400).json({ message: "billNumber is required" });
+    }
 
   const itemFields = ["items", "itemNumber", "boxQuantity", "sellPrice", "size"];
   const hasItemPayload = itemFields.some((field) => payload[field] != null);
@@ -252,8 +292,12 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findById(req.params.id).select({ _id: 1, billNumber: 1 }).lean();
     if (!customer) return res.status(404).json({ message: "Customer not found" });
+    await Promise.all([
+      Customer.deleteOne({ _id: customer._id }),
+      ClientHistory.deleteMany({ billNumber: customer.billNumber }),
+    ]);
     res.json({ message: "Customer deleted", id: customer._id });
   } catch (error) {
     res.status(500).json({ message: error.message });

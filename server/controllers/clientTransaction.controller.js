@@ -13,7 +13,8 @@ exports.list = async (req, res) => {
     if (!client) return res.status(404).json({ message: "Client not found" });
 
     const transactions = await ClientTransaction.find({ clientId })
-      .sort({ createdAt: -1 })
+      .select("clientId amount type date paymentMode note createdAt updatedAt")
+      .sort({ date: -1, createdAt: -1 })
       .lean();
 
     res.json({ data: transactions });
@@ -45,12 +46,27 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: "Invalid type" });
     }
 
+    if (req.body.date == null || req.body.date === "") {
+      return res.status(400).json({ message: "date is required" });
+    }
+    const date = new Date(req.body.date);
+    if (Number.isNaN(date.getTime())) {
+      return res.status(400).json({ message: "date must be a valid date" });
+    }
+
+    const paymentMode = String(req.body.paymentMode || "").trim();
+    if (type === "payment" && !paymentMode) {
+      return res.status(400).json({ message: "paymentMode is required for payment type" });
+    }
+
     const note = (req.body.note || "").trim();
 
     const tx = await ClientTransaction.create({
       clientId,
       amount,
       type,
+      date,
+      paymentMode,
       note,
     });
 
@@ -90,4 +106,3 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-

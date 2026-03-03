@@ -13,6 +13,11 @@ const clientItemSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    oldItemName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     actualPrice: {
       type: Number,
       required: true,

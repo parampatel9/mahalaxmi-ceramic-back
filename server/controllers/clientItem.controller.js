@@ -3,7 +3,7 @@ const Client = require("../models/client");
 const { buildListQuery } = require("../utils/listQuery");
 const mongoose = require("mongoose");
 
-const SEARCH_FIELDS = ["itemNumber"];
+const SEARCH_FIELDS = ["itemNumber", "oldItemName"];
 const FILTER_SCHEMA = { actualPrice: "number" };
 
 function getListOptions(req, clientId) {
@@ -89,9 +89,12 @@ exports.create = async (req, res) => {
       return res.status(409).json({ message: "itemNumber already exists" });
     }
 
+    const oldItemName = String(req.body.oldItemName || "").trim();
+
     const created = await ClientItem.create({
       clientId,
       itemNumber,
+      oldItemName,
       actualPrice: price,
       itemTypeId,
     });
@@ -127,6 +130,10 @@ exports.update = async (req, res) => {
       }
 
       req.body.itemNumber = itemNumber;
+    }
+
+    if (req.body.oldItemName !== undefined) {
+      req.body.oldItemName = String(req.body.oldItemName || "").trim();
     }
 
     const updated = await ClientItem.findOneAndUpdate(
@@ -170,11 +177,12 @@ exports.remove = async (req, res) => {
 exports.listAll = async (req, res) => {
   try {
     const { query, skip, limit, sort, page } = buildListQuery(req, {
-      searchFields: SEARCH_FIELDS,
+      searchFields: ["itemNumber"],
       filterSchema: { ...FILTER_SCHEMA, clientId: "ObjectId" },
     });
     const [data, total] = await Promise.all([
       ClientItem.find(query)
+        .select("-oldItemName")
         .sort(sort)
         .skip(skip)
         .limit(limit)

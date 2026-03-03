@@ -18,6 +18,16 @@ const clientTransactionSchema = new mongoose.Schema(
       enum: ["payment", "adjustment"],
       default: "payment",
     },
+    date: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+    paymentMode: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     note: {
       type: String,
       trim: true,
@@ -27,7 +37,6 @@ const clientTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-clientTransactionSchema.index({ clientId: 1, createdAt: -1 });
+clientTransactionSchema.index({ clientId: 1, date: -1, createdAt: -1 });
 
 module.exports = mongoose.model("ClientTransaction", clientTransactionSchema);
-

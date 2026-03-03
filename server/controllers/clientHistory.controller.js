@@ -49,8 +49,25 @@ exports.list = async (req, res) => {
       ClientHistory.find(query).sort(sort).skip(skip).limit(limit).lean(),
       ClientHistory.countDocuments(query),
     ]);
+    const historyItemNumbers = [...new Set(data.map((row) => row.itemNumber).filter(Boolean))];
+    let oldNameByItemNumber = new Map();
+    if (historyItemNumbers.length) {
+      const clientItems = await ClientItem.find({
+        clientId: clientObjectId,
+        itemNumber: { $in: historyItemNumbers },
+      })
+        .select({ itemNumber: 1, oldItemName: 1 })
+        .lean();
+      oldNameByItemNumber = new Map(
+        clientItems.map((item) => [item.itemNumber, item.oldItemName || ""])
+      );
+    }
+    const dataWithOldItemName = data.map((row) => ({
+      ...row,
+      oldItemName: oldNameByItemNumber.get(row.itemNumber) || "",
+    }));
     res.json({
-      data,
+      data: dataWithOldItemName,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -158,7 +175,17 @@ exports.getOne = async (req, res) => {
   try {
     const doc = await ClientHistory.findById(req.params.id).lean();
     if (!doc) return res.status(404).json({ message: "Client history not found" });
-    res.json(doc);
+    let oldItemName = "";
+    if (doc.clientId && doc.itemNumber) {
+      const clientItem = await ClientItem.findOne({
+        clientId: doc.clientId,
+        itemNumber: doc.itemNumber,
+      })
+        .select({ oldItemName: 1 })
+        .lean();
+      oldItemName = clientItem?.oldItemName || "";
+    }
+    res.json({ ...doc, oldItemName });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

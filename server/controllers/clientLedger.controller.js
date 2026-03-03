@@ -30,7 +30,8 @@ exports.getLedger = async (req, res) => {
     const pendingAmount = totalPurchase - totalPaid;
 
     const transactions = await ClientTransaction.find({ clientId: clientObjectId })
-      .sort({ createdAt: -1 })
+      .select("clientId amount type date paymentMode note createdAt updatedAt")
+      .sort({ date: -1, createdAt: -1 })
       .lean();
 
     res.json({
@@ -47,4 +48,3 @@ exports.getLedger = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
