@@ -15,8 +15,9 @@ const clientItemSchema = new mongoose.Schema(
     },
     oldItemName: {
       type: String,
+      required: true,
       trim: true,
-      default: "",
+      unique: true,
     },
     actualPrice: {
       type: Number,

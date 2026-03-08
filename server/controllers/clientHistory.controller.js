@@ -4,8 +4,18 @@ const ClientItem = require("../models/clientItem");
 const { buildListQuery } = require("../utils/listQuery");
 const mongoose = require("mongoose");
 
-const SEARCH_FIELDS = ["itemNumber"];
-const FILTER_SCHEMA = { billNumber: "number" };
+const SEARCH_FIELDS = [];
+const FILTER_SCHEMA = { billNumber: "number", entryType: "string" };
+
+function extractSearchText(query = {}) {
+  const rawSearch =
+    typeof query.search === "string"
+      ? query.search
+      : typeof query.searchFields === "string"
+      ? query.searchFields
+      : "";
+  return rawSearch.trim();
+}
 
 /**
  * Client history is auto-generated on customer create. Only list, getOne, delete are exposed.
@@ -27,7 +37,9 @@ exports.list = async (req, res) => {
       filterSchema: FILTER_SCHEMA,
     });
     const clientObjectId = new mongoose.Types.ObjectId(clientId);
+    const searchText = extractSearchText(req.query);
     const clientScopedOr = [{ clientId: clientObjectId }];
+    const searchOr = [];
 
     // Backward compatibility for older history rows that were created without clientId.
     const itemNumbers = await ClientItem.distinct("itemNumber", { clientId: clientObjectId });
@@ -37,12 +49,46 @@ exports.list = async (req, res) => {
         itemNumber: { $in: itemNumbers },
       });
     }
-    if (query.$or) {
-      const searchOr = query.$or;
-      delete query.$or;
-      query.$and = [{ $or: searchOr }, { $or: clientScopedOr }];
-    } else {
-      query.$or = clientScopedOr;
+
+    if (searchText) {
+      searchOr.push({ itemNumber: new RegExp(searchText, "i") });
+
+      if (/^\d+$/.test(searchText)) {
+        searchOr.push({ billNumber: Number(searchText) });
+      }
+
+      const oldNameItemNumbers = await ClientItem.distinct("itemNumber", {
+        clientId: clientObjectId,
+        oldItemName: new RegExp(searchText, "i"),
+      });
+      if (oldNameItemNumbers.length) {
+        searchOr.push({ itemNumber: { $in: oldNameItemNumbers } });
+      }
+    }
+
+    query.$and = query.$and || [];
+    query.$and.push({ $or: clientScopedOr });
+    if (searchOr.length) {
+      query.$and.push({ $or: searchOr });
+    }
+
+    // Date filter: if ?date=YYYY-MM-DD is provided, filter by that business day in IST.
+    if (req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+      const dateStr = req.query.date;
+      // Start and end of the day in Asia/Kolkata
+      const startOfDay = new Date(`${dateStr}T00:00:00.000+05:30`);
+      const endOfDay = new Date(`${dateStr}T23:59:59.999+05:30`);
+
+      const dateFieldQuery = { $gte: startOfDay, $lte: endOfDay };
+
+      // Filter by the new 'date' field if it exists, otherwise fallback to 'createdAt'
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { date: dateFieldQuery },
+          { date: { $exists: false }, createdAt: dateFieldQuery }
+        ]
+      });
     }
 
     const [data, total] = await Promise.all([
@@ -90,14 +136,29 @@ exports.dayWiseSummary = async (req, res) => {
 
     const clientObjectId = new mongoose.Types.ObjectId(clientId);
 
+    // Build the query to include both direct clientId matches and itemNumber matches for backward compatibility.
+    const clientScopedOr = [{ clientId: clientObjectId }];
+    const itemNumbers = await ClientItem.distinct("itemNumber", { clientId: clientObjectId });
+    if (itemNumbers.length) {
+      clientScopedOr.push({
+        clientId: { $exists: false },
+        itemNumber: { $in: itemNumbers },
+      });
+    }
+
     const rows = await ClientHistory.aggregate([
-      { $match: { clientId: clientObjectId } },
+      { $match: { $or: clientScopedOr } },
+      {
+        $addFields: {
+          effectiveDate: { $ifNull: ["$date", "$createdAt"] },
+        },
+      },
       {
         $group: {
           _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
-            day: { $dayOfMonth: "$createdAt" },
+            year: { $year: { date: "$effectiveDate", timezone: "Asia/Kolkata" } },
+            month: { $month: { date: "$effectiveDate", timezone: "Asia/Kolkata" } },
+            day: { $dayOfMonth: { date: "$effectiveDate", timezone: "Asia/Kolkata" } },
           },
           totalAmount: { $sum: "$totalPrice" },
           billNumbers: { $addToSet: "$billNumber" },
@@ -111,13 +172,14 @@ exports.dayWiseSummary = async (req, res) => {
               year: "$_id.year",
               month: "$_id.month",
               day: "$_id.day",
+              timezone: "Asia/Kolkata",
             },
           },
           totalAmount: 1,
           billCount: { $size: "$billNumbers" },
         },
       },
-      { $sort: { date: 1 } },
+      { $sort: { date: -1 } },
     ]);
 
     res.json({ client: { _id: client._id, clientName: client.clientName }, data: rows });
@@ -141,16 +203,31 @@ exports.monthWiseSummary = async (req, res) => {
 
     const clientObjectId = new mongoose.Types.ObjectId(clientId);
 
+    // Build the query to include both direct clientId matches and itemNumber matches for backward compatibility.
+    const clientScopedOr = [{ clientId: clientObjectId }];
+    const itemNumbers = await ClientItem.distinct("itemNumber", { clientId: clientObjectId });
+    if (itemNumbers.length) {
+      clientScopedOr.push({
+        clientId: { $exists: false },
+        itemNumber: { $in: itemNumbers },
+      });
+    }
+
     const rows = await ClientHistory.aggregate([
-      { $match: { clientId: clientObjectId } },
+      { $match: { $or: clientScopedOr } },
+      {
+        $addFields: {
+          effectiveDate: { $ifNull: ["$date", "$createdAt"] },
+        },
+      },
       {
         $group: {
           _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
+            year: { $year: { date: "$effectiveDate", timezone: "Asia/Kolkata" } },
+            month: { $month: { date: "$effectiveDate", timezone: "Asia/Kolkata" } },
           },
           totalAmount: { $sum: "$totalPrice" },
-          days: { $addToSet: { $dayOfMonth: "$createdAt" } },
+          days: { $addToSet: { $dayOfMonth: { date: "$effectiveDate", timezone: "Asia/Kolkata" } } },
         },
       },
       {
@@ -162,7 +239,7 @@ exports.monthWiseSummary = async (req, res) => {
           dayCount: { $size: "$days" },
         },
       },
-      { $sort: { year: 1, month: 1 } },
+      { $sort: { year: -1, month: -1 } },
     ]);
 
     res.json({ client: { _id: client._id, clientName: client.clientName }, data: rows });

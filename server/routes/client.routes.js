@@ -7,6 +7,8 @@ const clientLedgerController = require("../controllers/clientLedger.controller")
 const clientTransactionController = require("../controllers/clientTransaction.controller");
 
 // Client CRUD
+router.get("/list-ledger", clientLedgerController.listLedger);
+router.post("/list-ledger", clientLedgerController.listLedger);
 router.get("/", clientController.list);
 router.post("/list", clientController.listPost);
 router.get("/:id", clientController.getOne);
@@ -19,6 +21,7 @@ router.get("/:id/items", clientItemController.list);
 router.post("/:id/items/list", clientItemController.listPost);
 router.get("/:id/items/:itemId", clientItemController.getOne);
 router.post("/:id/items", clientItemController.create);
+router.post("/:id/items/import", clientItemController.importUpload, clientItemController.bulkImport);
 router.put("/:id/items/:itemId", clientItemController.update);
 router.delete("/:id/items/:itemId", clientItemController.remove);
 
